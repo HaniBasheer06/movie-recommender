@@ -1,474 +1,437 @@
-import os
 import requests
 import streamlit as st
-from dotenv import load_dotenv, find_dotenv
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 
-env_path = find_dotenv()
-load_dotenv(env_path)
+st.set_page_config(
+    page_title="IMDb Style Movie Recommender",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
 
-API_KEY = os.getenv("TMDB_API_KEY")
 BASE_URL = "https://api.themoviedb.org/3"
-IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w500"
+IMAGE_BASE = "https://image.tmdb.org/t/p/w500"
+FALLBACK_POSTER = "https://via.placeholder.com/500x750?text=No+Poster"
 
-st.set_page_config(page_title="IMDb Style Movie Recommender", page_icon="🎬", layout="wide")
-
-if not API_KEY:
-    st.error("TMDB_API_KEY not found. Add it in your .env file.")
+try:
+    API_KEY = st.secrets["TMDB_API_KEY"]
+except Exception:
+    st.error("TMDB_API_KEY not found. Add it in Streamlit Secrets.")
     st.stop()
-
-
-def create_session():
-    session = requests.Session()
-    retry_strategy = Retry(
-        total=5,
-        connect=5,
-        read=5,
-        backoff_factor=1,
-        status_forcelist=[429, 500, 502, 503, 504],
-        allowed_methods=["GET"]
-    )
-    adapter = HTTPAdapter(max_retries=retry_strategy)
-    session.mount("https://", adapter)
-    session.mount("http://", adapter)
-    session.headers.update({
-        "User-Agent": "Mozilla/5.0 MovieRecommender/1.0",
-        "Accept": "application/json"
-    })
-    return session
-
-
-session = create_session()
-
-
-def safe_get(url, params):
-    try:
-        response = session.get(url, params=params, timeout=20)
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        st.error(f"Network/API error: {e}")
-        return None
-
-
-def search_movies(query):
-    url = f"{BASE_URL}/search/movie"
-    params = {
-        "api_key": API_KEY,
-        "query": query,
-        "language": "en-US",
-        "page": 1,
-        "include_adult": False
-    }
-    data = safe_get(url, params)
-    return data.get("results", []) if data else []
-
-
-def get_movie_recommendations(movie_id):
-    url = f"{BASE_URL}/movie/{movie_id}/recommendations"
-    params = {
-        "api_key": API_KEY,
-        "language": "en-US",
-        "page": 1
-    }
-    data = safe_get(url, params)
-    return data.get("results", []) if data else []
-
-
-def get_similar_movies(movie_id):
-    url = f"{BASE_URL}/movie/{movie_id}/similar"
-    params = {
-        "api_key": API_KEY,
-        "language": "en-US",
-        "page": 1
-    }
-    data = safe_get(url, params)
-    return data.get("results", []) if data else []
-
-
-def get_trending_movies():
-    url = f"{BASE_URL}/trending/movie/week"
-    params = {
-        "api_key": API_KEY,
-        "language": "en-US",
-        "page": 1
-    }
-    data = safe_get(url, params)
-    return data.get("results", []) if data else []
-
-
-def get_genre_map():
-    url = f"{BASE_URL}/genre/movie/list"
-    params = {
-        "api_key": API_KEY,
-        "language": "en-US"
-    }
-    data = safe_get(url, params)
-    if data and "genres" in data:
-        return {genre["id"]: genre["name"] for genre in data["genres"]}
-    return {}
-
-
-def poster_url(poster_path):
-    if poster_path:
-        return f"{IMAGE_BASE_URL}{poster_path}"
-    return None
-
-
-def format_movie_label(movie):
-    title = movie.get("title", "Unknown Title")
-    release_date = movie.get("release_date", "")
-    year = release_date[:4] if release_date else "N/A"
-    return f"{title} ({year})"
-
-
-def render_genre_badges(genre_ids, genre_map):
-    if not genre_ids:
-        return '<div class="genre-wrap"><span class="genre-badge">Unknown</span></div>'
-
-    badges = []
-    for gid in genre_ids[:3]:
-        genre_name = genre_map.get(gid, "Unknown")
-        badges.append(f'<span class="genre-badge">{genre_name}</span>')
-
-    return f'<div class="genre-wrap">{" ".join(badges)}</div>'
-
 
 st.markdown("""
 <style>
+/* ===== GLOBAL THEME ===== */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap');
+
 .stApp {
-    background-color: #0d0d0d;
-    color: white;
+    background: radial-gradient(1200px 600px at 10% -10%, #1b2735 0%, transparent 60%),
+                radial-gradient(1000px 500px at 90% -20%, #090a0f 0%, #050608 60%);
+    background-color: #050608;
+    color: #e6e6e6;
+    font-family: 'Inter', sans-serif;
 }
 
-.block-container {
-    max-width: 1380px;
-    padding-top: 0.8rem;
-    padding-bottom: 2rem;
+/* ===== HERO SECTION ===== */
+.hero-section {
+    padding: 40px 10px 20px 10px;
+    text-align: center;
 }
-
-.navbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    background: #121212;
-    border: 1px solid #232323;
-    padding: 14px 22px;
-    border-radius: 14px;
-    margin-bottom: 18px;
-    box-shadow: 0 8px 20px rgba(0,0,0,0.25);
-}
-
-.nav-left {
-    display: flex;
-    align-items: center;
-    gap: 18px;
-}
-
-.logo-box {
-    background: #f5c518;
-    color: black;
-    font-weight: 900;
-    font-size: 22px;
-    padding: 8px 16px;
-    border-radius: 10px;
-    line-height: 1;
-}
-
-.nav-item {
-    color: #dddddd;
-    font-size: 15px;
-    font-weight: 600;
-}
-
-.nav-right {
-    color: #f5c518;
-    font-size: 14px;
-    font-weight: 700;
-}
-
-.hero {
-    background: linear-gradient(135deg, rgba(245,197,24,0.14), rgba(255,255,255,0.02)),
-                linear-gradient(90deg, #181818, #101010);
-    border: 1px solid #2a2a2a;
-    border-radius: 22px;
-    padding: 42px 36px;
-    margin-bottom: 28px;
-    box-shadow: 0 12px 32px rgba(0,0,0,0.28);
-}
-
-.hero-kicker {
-    color: #f5c518;
-    font-size: 14px;
-    font-weight: 800;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    margin-bottom: 10px;
-}
-
 .hero-title {
-    font-size: 52px;
-    font-weight: 900;
-    color: white;
-    line-height: 1.05;
-    margin-bottom: 14px;
-}
-
-.hero-text {
-    color: #d7d7d7;
-    font-size: 18px;
-    max-width: 760px;
-    line-height: 1.6;
-    margin-bottom: 18px;
-}
-
-.hero-badges {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-    margin-top: 12px;
-}
-
-.hero-badge {
-    background: #1f1f1f;
-    color: #f5c518;
-    border: 1px solid #353535;
-    padding: 8px 14px;
-    border-radius: 999px;
-    font-size: 13px;
-    font-weight: 700;
-}
-
-.section-title {
-    font-size: 28px;
+    font-size: 48px;
     font-weight: 800;
-    color: #f5c518;
-    margin: 22px 0 14px 0;
+    background: linear-gradient(90deg, #f5c518, #ffb700);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 10px;
+    letter-spacing: -0.5px;
+}
+.hero-subtitle {
+    font-size: 18px;
+    color: #b0b0b0;
+    max-width: 700px;
+    margin: 0 auto 20px auto;
+    line-height: 1.5;
 }
 
-.small-note {
-    color: #bcbcbc;
+/* ===== SEARCH BOX ===== */
+.search-container {
+    max-width: 900px;
+    margin: 0 auto 30px auto;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    padding: 18px 20px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+}
+.search-label {
+    font-weight: 600;
+    color: #d0d0d0;
+    margin-bottom: 8px;
+    font-size: 15px;
+}
+.stTextInput > div > div > input {
+    background-color: #0f1115 !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(255,255,255,0.12) !important;
+    border-radius: 12px !important;
+    font-size: 15px !important;
+}
+.stSelectbox > div > div {
+    background-color: #0f1115 !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(255,255,255,0.12) !important;
+    border-radius: 12px !important;
+}
+
+/* ===== BUTTONS ===== */
+.stButton > button {
+    background: linear-gradient(90deg, #f5c518, #ffb700);
+    color: #000000 !important;
+    font-weight: 700 !important;
+    border: none !important;
+    border-radius: 12px !important;
+    padding: 0.6rem 1.2rem !important;
+    font-size: 15px !important;
+    box-shadow: 0 6px 18px rgba(245,197,24,0.25);
+    transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+}
+.stButton > button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 24px rgba(245,197,24,0.35);
+}
+
+/* ===== SECTION TITLES ===== */
+.section-title {
+    font-size: 26px;
+    font-weight: 700;
+    color: #ffffff;
+    margin: 30px 0 16px 0;
+    letter-spacing: -0.3px;
+}
+
+/* ===== MOVIE CARDS ===== */
+.movie-card {
+    background: linear-gradient(180deg, #0f1218 0%, #0a0c10 100%);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 18px;
+    overflow: hidden;
+    box-shadow: 0 10px 24px rgba(0,0,0,0.35);
+    transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+    margin-bottom: 22px;
+    min-height: 700px;
+    display: flex;
+    flex-direction: column;
+}
+.movie-card:hover {
+    transform: translateY(-8px) scale(1.015);
+    box-shadow: 0 18px 36px rgba(0,0,0,0.5);
+    border-color: rgba(245,197,24,0.35);
+}
+.movie-poster {
+    width: 100%;
+    height: 400px;
+    object-fit: cover;
+    display: block;
+    background: #15181f;
+}
+.movie-content {
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+}
+.movie-title {
+    font-size: 19px;
+    font-weight: 700;
+    color: #ffffff;
+    line-height: 1.3;
+    min-height: 52px;
     margin-bottom: 8px;
 }
-
-.movie-card {
-    background-color: #171717;
-    border: 1px solid #2a2a2a;
-    border-radius: 18px;
-    padding: 12px;
-    margin-bottom: 18px;
-    box-shadow: 0 6px 18px rgba(0,0,0,0.22);
-    min-height: 470px;
-    transition: transform 0.28s ease, box-shadow 0.28s ease, border-color 0.28s ease;
-}
-
-.movie-card:hover {
-    transform: translateY(-8px) scale(1.02);
-    box-shadow: 0 18px 30px rgba(0,0,0,0.35);
-    border-color: #f5c518;
-}
-
-.movie-title {
-    font-size: 18px;
-    font-weight: 700;
-    color: white;
-    margin-top: 10px;
-    margin-bottom: 6px;
-}
-
 .movie-meta {
-    color: #f5c518;
-    font-size: 14px;
+    font-size: 13px;
+    color: #b8b8b8;
     margin-bottom: 10px;
 }
-
-.movie-overview {
-    color: #d0d0d0;
-    font-size: 14px;
-    line-height: 1.5;
-    margin-top: 10px;
+.badges {
+    margin-bottom: 12px;
 }
-
-.genre-wrap {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 4px;
-    margin-bottom: 6px;
-}
-
-.genre-badge {
-    background: rgba(245, 197, 24, 0.12);
+.badge {
+    display: inline-block;
+    background: rgba(245,197,24,0.15);
     color: #f5c518;
-    border: 1px solid rgba(245, 197, 24, 0.35);
-    padding: 5px 10px;
+    border: 1px solid rgba(245,197,24,0.35);
+    padding: 4px 10px;
     border-radius: 999px;
     font-size: 12px;
     font-weight: 700;
-    display: inline-block;
+    margin: 2px 6px 2px 0;
+}
+.overview {
+    color: #c7c7c7;
+    font-size: 13px;
+    line-height: 1.5;
+    margin-top: auto;
 }
 
-div.stButton > button {
-    background-color: #f5c518;
-    color: black;
-    font-weight: 800;
-    border-radius: 10px;
-    border: none;
-    padding: 0.65rem 1.3rem;
-}
-
-div.stButton > button:hover {
-    background-color: #ffd54d;
-    color: black;
-}
-
-[data-testid="stTextInput"] input,
-[data-testid="stSelectbox"] div,
-[data-testid="stRadio"] {
-    border-radius: 10px;
+/* ===== RADIO BUTTONS ===== */
+.stRadio > label {
+    color: #d0d0d0 !important;
 }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("""
-<div class="navbar">
-    <div class="nav-left">
-        <div class="logo-box">IMDb</div>
-        <div class="nav-item">Home</div>
-        <div class="nav-item">Movies</div>
-        <div class="nav-item">Trending</div>
-        <div class="nav-item">Top Rated</div>
-        <div class="nav-item">Watchlist</div>
-    </div>
-    <div class="nav-right">Movie Discovery Experience</div>
-</div>
-""", unsafe_allow_html=True)
+
+@st.cache_data(show_spinner=False)
+def get_genre_map():
+    url = f"{BASE_URL}/genre/movie/list"
+    params = {"api_key": API_KEY, "language": "en-US"}
+    response = requests.get(url, params=params, timeout=20)
+    data = response.json()
+    return {genre["id"]: genre["name"] for genre in data.get("genres", [])}
+
+
+@st.cache_data(show_spinner=False)
+def search_movies(movie_title, year=None):
+    params = {
+        "api_key": API_KEY,
+        "query": movie_title,
+        "language": "en-US",
+        "page": 1,
+        "include_adult": False
+    }
+    if year:
+        params["year"] = year
+
+    response = requests.get(f"{BASE_URL}/search/movie", params=params, timeout=20)
+    data = response.json()
+    return data.get("results", [])
+
+
+@st.cache_data(show_spinner=False)
+def get_recommendations(movie_id, mode="recommendations"):
+    url = f"{BASE_URL}/movie/{movie_id}/{mode}"
+    params = {"api_key": API_KEY, "language": "en-US", "page": 1}
+    response = requests.get(url, params=params, timeout=20)
+    data = response.json()
+    return data.get("results", [])
+
+
+@st.cache_data(show_spinner=False)
+def get_trending_movies():
+    response = requests.get(
+        f"{BASE_URL}/trending/movie/week",
+        params={"api_key": API_KEY},
+        timeout=20
+    )
+    data = response.json()
+    return data.get("results", [])
+
+
+def build_poster_url(poster_path):
+    if poster_path:
+        return f"{IMAGE_BASE}{poster_path}"
+    return FALLBACK_POSTER
+
+
+def safe_text(text, default="N/A"):
+    if text and str(text).strip():
+        return str(text)
+    return default
+
+
+def short_overview(text, max_len=170):
+    if not text:
+        return "No overview available."
+    text = text.strip()
+    if len(text) <= max_len:
+        return text
+    return text[:max_len].rsplit(" ", 1)[0] + "..."
+
+
+def add_genre_names(movie_list, genre_map):
+    for movie in movie_list:
+        ids = movie.get("genre_ids", [])
+        movie["genre_names"] = [genre_map.get(gid, "Unknown") for gid in ids[:4]]
+    return movie_list
+
+
+def extract_year(date_text):
+    if date_text and len(date_text) >= 4:
+        return date_text[:4]
+    return "N/A"
+
+
+def normalize_title(title):
+    return safe_text(title, "").strip().lower()
+
+
+def choose_best_match(results, query, year=None):
+    if not results:
+        return None
+
+    query_norm = normalize_title(query)
+
+    if year:
+        exact_title_year = [
+            m for m in results
+            if normalize_title(m.get("title")) == query_norm and extract_year(m.get("release_date")) == str(year)
+        ]
+        if exact_title_year:
+            return exact_title_year[0]
+
+    exact_title = [
+        m for m in results
+        if normalize_title(m.get("title")) == query_norm
+    ]
+    if exact_title:
+        return exact_title[0]
+
+    if year:
+        same_year = [
+            m for m in results
+            if extract_year(m.get("release_date")) == str(year)
+        ]
+        if same_year:
+            return same_year[0]
+
+    return results[0]
+
+
+def render_movie_cards(movie_list, genre_map, columns_count=4):
+    if not movie_list:
+        st.warning("No movies found.")
+        return
+
+    movie_list = add_genre_names(movie_list, genre_map)
+    cols = st.columns(columns_count, vertical_alignment="top")
+
+    for i, movie in enumerate(movie_list):
+        with cols[i % columns_count]:
+            title = safe_text(movie.get("title"), "No title")
+            poster_url = build_poster_url(movie.get("poster_path"))
+            rating = movie.get("vote_average", "N/A")
+            release_date = extract_year(movie.get("release_date"))
+            overview = short_overview(movie.get("overview"))
+            badges = "".join(
+                [f"<span class='badge'>{genre}</span>" for genre in movie.get("genre_names", [])]
+            )
+
+            st.markdown(
+                f"""
+                <div class="movie-card">
+                    <img class="movie-poster" src="{poster_url}" alt="{title}">
+                    <div class="movie-content">
+                        <div class="movie-title">{title}</div>
+                        <div class="movie-meta">⭐ {rating} | 📅 {release_date}</div>
+                        <div class="badges">{badges}</div>
+                        <div class="overview">{overview}</div>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+
+# ===== UI =====
 
 st.markdown("""
-<div class="hero">
-    <div class="hero-kicker">Find your next favorite film</div>
-    <div class="hero-title">Discover movies with an IMDb-style experience</div>
-    <div class="hero-text">
-        Search for a film, pick the exact title, and get smart recommendations or similar movies
-        with a cinematic dark interface, bold highlights, and poster-first browsing.
-    </div>
-    <div class="hero-badges">
-        <div class="hero-badge">Live TMDb Search</div>
-        <div class="hero-badge">Smart Recommendations</div>
-        <div class="hero-badge">Similar Titles</div>
-        <div class="hero-badge">Trending This Week</div>
+<div class="hero-section">
+    <div class="hero-title">🎬 IMDb Style Movie Recommender</div>
+    <div class="hero-subtitle">
+        Discover your next favorite film with smarter search, exact matching, and a cinematic interface.
     </div>
 </div>
 """, unsafe_allow_html=True)
 
 genre_map = get_genre_map()
 
-st.markdown('<div class="section-title">Search Movies</div>', unsafe_allow_html=True)
-movie_query = st.text_input("Search for a movie", placeholder="Example: Interstellar")
+st.markdown('<div class="search-container">', unsafe_allow_html=True)
+col1, col2 = st.columns([3, 1])
 
-if "search_results" not in st.session_state:
-    st.session_state.search_results = []
+with col1:
+    movie_name = st.text_input("", placeholder="Search movies (e.g., Inception)")
 
-if "trending_movies" not in st.session_state:
-    st.session_state.trending_movies = get_trending_movies()
+with col2:
+    year_input = st.text_input("", placeholder="Year (optional)")
 
-if st.button("Search"):
-    if movie_query.strip():
-        st.session_state.search_results = search_movies(movie_query.strip())
-        if not st.session_state.search_results:
-            st.warning("No movies found or network issue occurred.")
+st.markdown('</div>', unsafe_allow_html=True)
+
+recommendation_mode = st.radio(
+    "Recommendation mode",
+    ["recommendations", "similar"],
+    horizontal=True
+)
+
+search_clicked = st.button("Search & Recommend", use_container_width=False)
+
+if search_clicked:
+    if not movie_name.strip():
+        st.warning("Please enter a movie title.")
     else:
-        st.warning("Please enter a movie name.")
+        parsed_year = None
+        if year_input.strip().isdigit():
+            parsed_year = int(year_input.strip())
 
-st.markdown('<div class="section-title">Trending This Week</div>', unsafe_allow_html=True)
-st.markdown('<div class="small-note">Fresh picks powered by live movie trends.</div>', unsafe_allow_html=True)
+        with st.spinner("Searching movies..."):
+            search_results = search_movies(movie_name, parsed_year)
 
-trending = st.session_state.trending_movies[:4]
-trend_cols = st.columns(4)
-
-for i, movie in enumerate(trending):
-    with trend_cols[i]:
-        st.markdown('<div class="movie-card">', unsafe_allow_html=True)
-        img = poster_url(movie.get("poster_path"))
-        if img:
-            st.image(img, use_container_width=True)
-
-        st.markdown(f'<div class="movie-title">{movie.get("title", "Unknown")}</div>', unsafe_allow_html=True)
-        st.markdown(
-            f'<div class="movie-meta">⭐ {movie.get("vote_average", "N/A")} | 📅 {movie.get("release_date", "N/A")}</div>',
-            unsafe_allow_html=True
-        )
-        st.markdown(render_genre_badges(movie.get("genre_ids", []), genre_map), unsafe_allow_html=True)
-
-        overview = movie.get("overview", "No overview available.")
-        if len(overview) > 120:
-            overview = overview[:120] + "..."
-        st.markdown(f'<div class="movie-overview">{overview}</div>', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-
-if st.session_state.search_results:
-    options = {
-        format_movie_label(movie): movie
-        for movie in st.session_state.search_results[:10]
-    }
-
-    st.markdown('<div class="section-title">Selected Movie</div>', unsafe_allow_html=True)
-    selected_label = st.selectbox("Choose the correct movie", list(options.keys()))
-    selected_movie = options[selected_label]
-
-    col1, col2 = st.columns([1, 2])
-
-    with col1:
-        img = poster_url(selected_movie.get("poster_path"))
-        if img:
-            st.image(img, use_container_width=True)
-
-    with col2:
-        st.markdown(f"### {selected_movie.get('title', 'Unknown')}")
-        st.write(f"**Release Date:** {selected_movie.get('release_date', 'N/A')}")
-        st.write(f"**Rating:** ⭐ {selected_movie.get('vote_average', 'N/A')}")
-        st.markdown(render_genre_badges(selected_movie.get("genre_ids", []), genre_map), unsafe_allow_html=True)
-        st.write(f"**Overview:** {selected_movie.get('overview', 'No overview available.')}")
-
-    mode = st.radio(
-        "Choose recommendation type",
-        ["Recommendations", "Similar Movies"],
-        horizontal=True
-    )
-
-    if st.button("Show Results"):
-        movie_id = selected_movie["id"]
-
-        if mode == "Recommendations":
-            results = get_movie_recommendations(movie_id)
+        if not search_results:
+            st.error("No matching movie found.")
         else:
-            results = get_similar_movies(movie_id)
+            top_results = search_results[:10]
 
-        if not results:
-            st.warning("No recommendations found or network issue occurred.")
-        else:
-            st.markdown(f'<div class="section-title">{mode}</div>', unsafe_allow_html=True)
-            cols = st.columns(4)
+            suggestions = []
+            for movie in top_results:
+                title = safe_text(movie.get("title"), "No title")
+                year = extract_year(movie.get("release_date"))
+                original_title = safe_text(movie.get("original_title"), title)
+                label = f"{title} ({year})"
+                if original_title != title:
+                    label += f" • Original: {original_title}"
+                suggestions.append(label)
 
-            for i, movie in enumerate(results[:8]):
-                with cols[i % 4]:
-                    st.markdown('<div class="movie-card">', unsafe_allow_html=True)
+            auto_best = choose_best_match(search_results, movie_name, parsed_year)
+            auto_best_label = None
+            if auto_best:
+                auto_best_title = safe_text(auto_best.get("title"), "No title")
+                auto_best_year = extract_year(auto_best.get("release_date"))
+                auto_best_label = f"{auto_best_title} ({auto_best_year})"
+                if safe_text(auto_best.get("original_title"), auto_best_title) != auto_best_title:
+                    auto_best_label += f" • Original: {auto_best.get('original_title')}"
 
-                    img = poster_url(movie.get("poster_path"))
-                    if img:
-                        st.image(img, use_container_width=True)
+            default_index = 0
+            if auto_best_label in suggestions:
+                default_index = suggestions.index(auto_best_label)
 
-                    st.markdown(f'<div class="movie-title">{movie.get("title", "Unknown")}</div>', unsafe_allow_html=True)
-                    st.markdown(
-                        f'<div class="movie-meta">⭐ {movie.get("vote_average", "N/A")} | 📅 {movie.get("release_date", "N/A")}</div>',
-                        unsafe_allow_html=True
-                    )
-                    st.markdown(render_genre_badges(movie.get("genre_ids", []), genre_map), unsafe_allow_html=True)
+            st.markdown('<div class="section-title">Select the correct movie</div>', unsafe_allow_html=True)
+            selected_label = st.selectbox(
+                "",
+                suggestions,
+                index=default_index
+            )
 
-                    overview = movie.get("overview", "No overview available.")
-                    if len(overview) > 140:
-                        overview = overview[:140] + "..."
+            selected_index = suggestions.index(selected_label)
+            selected_movie = top_results[selected_index]
 
-                    st.markdown(f'<div class="movie-overview">{overview}</div>', unsafe_allow_html=True)
-                    st.markdown('</div>', unsafe_allow_html=True)
+            selected_title = safe_text(selected_movie.get("title"), "Selected movie")
+            selected_year = extract_year(selected_movie.get("release_date"))
+
+            st.markdown(
+                f'<div class="section-title">Because you liked: {selected_title} ({selected_year})</div>',
+                unsafe_allow_html=True
+            )
+
+            with st.spinner("Loading recommendations..."):
+                recommendations = get_recommendations(selected_movie["id"], mode=recommendation_mode)
+
+            if not recommendations:
+                st.warning("No recommendations found for this movie.")
+            else:
+                render_movie_cards(recommendations[:12], genre_map, columns_count=4)
+
+st.markdown('<div class="section-title">🔥 Trending This Week</div>', unsafe_allow_html=True)
+with st.spinner("Loading trending movies..."):
+    trending_movies = get_trending_movies()
+
+render_movie_cards(trending_movies[:8], genre_map, columns_count=4)
