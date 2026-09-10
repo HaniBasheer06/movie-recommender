@@ -479,20 +479,20 @@ def render_movie_detail(movie_id, genre_map):
     # Build trailer embed HTML if available
     trailer_html = ""
     if trailer_key:
-        trailer_html = dedent(f"""
-            <div style="margin-top: 20px;">
-                <div class="detail-section-title">Trailer</div>
-                <div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;max-width:100%;border-radius:12px;overflow:hidden;">
-                    <iframe style="position:absolute;top:0;left:0;width:100%;height:100%;"
-                        src="https://www.youtube.com/embed/{trailer_key}"
-                        title="YouTube video player"
-                        frameborder="0"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                        allowfullscreen>
-                    </iframe>
-                </div>
-            </div>
-        """)
+        trailer_html = (
+            '<div style="margin-top: 20px;">'
+            '    <div class="detail-section-title">Trailer</div>'
+            '    <div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;max-width:100%;border-radius:12px;overflow:hidden;">'
+            '        <iframe style="position:absolute;top:0;left:0;width:100%;height:100%;" '
+            f'           src="https://www.youtube.com/embed/{trailer_key}" '
+            '           title="YouTube video player" '
+            '           frameborder="0" '
+            '           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" '
+            '           allowfullscreen>'
+            '        </iframe>'
+            '    </div>'
+            '</div>'
+        )
 
     # Build cast HTML
     cast_html = ""
@@ -500,45 +500,46 @@ def render_movie_detail(movie_id, genre_map):
         cast_items = "".join(
             [f"<div class='cast-item'>{c.get('name', 'Unknown')} as {c.get('character', '')}</div>" for c in cast]
         )
-        cast_html = dedent(f"""
-            <div style="margin-top: 16px;">
-                <div class="detail-section-title">Top Cast</div>
-                <div class="cast-list">
-                    {cast_items}
-                </div>
-            </div>
-        """)
+        cast_html = (
+            '<div style="margin-top: 16px;">'
+            '    <div class="detail-section-title">Top Cast</div>'
+            '    <div class="cast-list">'
+            f'       {cast_items}'
+            '    </div>'
+            '</div>'
+        )
 
-    # Build full detail HTML
-    full_html = dedent(f"""
-        <div class="detail-container">
-            <div class="detail-header">
-                <img class="detail-poster" src="{poster_url}" alt="{title}">
-                <div class="detail-info">
-                    <div class="detail-title">{title}</div>
-                    {f'<div class="detail-tagline">{tagline}</div>' if tagline else ''}
-                    <div class="detail-meta">
-                        ⭐ {rating} | 📅 {release_date} | ⏱ {runtime if runtime else 'N/A'} min | {status}
-                    </div>
-                    <div class="badges">
-                        {"".join([f"<span class='badge'>{g}</span>" for g in genre_names])}
-                    </div>
-                </div>
-            </div>
+    tagline_html = f'<div class="detail-tagline">{tagline}</div>' if tagline else ""
 
-            <div style="margin-top: 16px;">
-                <div class="detail-section-title">Overview</div>
-                <div class="detail-overview">{overview}</div>
-            </div>
+    # Build full detail HTML as one simple string
+    full_html = (
+        '<div class="detail-container">'
+        '    <div class="detail-header">'
+        '        <img class="detail-poster" src="' + poster_url + '" alt="' + title + '">'
+        '        <div class="detail-info">'
+        '            <div class="detail-title">' + title + '</div>'
+        + tagline_html +
+        '            <div class="detail-meta">'
+        '                ⭐ ' + str(rating) + ' | 📅 ' + str(release_date) +
+        ' | ⏱ ' + (str(runtime) if runtime else "N/A") + ' min | ' + str(status) +
+        '            </div>'
+        '            <div class="badges">'
+        + "".join([f"<span class='badge'>{g}</span>" for g in genre_names]) +
+        '            </div>'
+        '        </div>'
+        '    </div>'
 
-            {trailer_html}
-            {cast_html}
+        '    <div style="margin-top: 16px;">'
+        '        <div class="detail-section-title">Overview</div>'
+        '        <div class="detail-overview">' + overview + '</div>'
+        '    </div>'
 
-            <div class="back-button">
-                <!-- back button will be added as a separate Streamlit widget below -->
-            </div>
-        </div>
-    """)
+        + trailer_html +
+        + cast_html +
+
+        '    <div class="back-button"></div>'
+        '</div>'
+    )
 
     st.markdown(full_html, unsafe_allow_html=True)
 
