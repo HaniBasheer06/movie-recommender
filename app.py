@@ -1,5 +1,6 @@
 import requests
 import streamlit as st
+from textwrap import dedent
 
 st.set_page_config(
     page_title="IMDb Style Movie Recommender",
@@ -18,7 +19,7 @@ except Exception:
     st.error("TMDB_API_KEY not found. Add it in Streamlit Secrets.")
     st.stop()
 
-st.markdown("""
+st.markdown(dedent("""
 <style>
 /* ===== GLOBAL THEME ===== */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap');
@@ -217,17 +218,16 @@ st.markdown("""
     color: #c0c0c0;
     margin-bottom: 14px;
 }
-.detail-overview {
-    font-size: 15px;
-    color: #d0d0d0;
-    line-height: 1.6;
-    margin-bottom: 16px;
-}
 .detail-section-title {
     font-size: 18px;
     font-weight: 700;
     color: #f5c518;
-    margin: 14px 0 8px 0;
+    margin: 16px 0 8px 0;
+}
+.detail-overview {
+    font-size: 15px;
+    color: #d0d0d0;
+    line-height: 1.6;
 }
 .cast-list {
     display: flex;
@@ -251,7 +251,7 @@ st.markdown("""
     color: #d0d0d0 !important;
 }
 </style>
-""", unsafe_allow_html=True)
+"""), unsafe_allow_html=True)
 
 
 # =========================
@@ -336,12 +336,6 @@ def build_poster_url(poster_path):
     return FALLBACK_POSTER
 
 
-def build_backdrop_url(backdrop_path):
-    if backdrop_path:
-        return f"{BACKDROP_BASE}{backdrop_path}"
-    return None
-
-
 def safe_text(text, default="N/A"):
     if text and str(text).strip():
         return str(text)
@@ -383,7 +377,8 @@ def choose_best_match(results, query, year=None):
     if year:
         exact_title_year = [
             m for m in results
-            if normalize_title(m.get("title")) == query_norm and extract_year(m.get("release_date")) == str(year)
+            if normalize_title(m.get("title")) == query_norm
+            and extract_year(m.get("release_date")) == str(year)
         ]
         if exact_title_year:
             return exact_title_year[0]
@@ -439,8 +434,7 @@ def render_movie_cards(movie_list, genre_map, columns_count=4, show_details_butt
                 [f"<span class='badge'>{genre}</span>" for genre in movie.get("genre_names", [])]
             )
 
-            st.markdown(
-                f"""
+            st.markdown(dedent(f"""
                 <div class="movie-card">
                     <img class="movie-poster" src="{poster_url}" alt="{title}">
                     <div class="movie-content">
@@ -450,9 +444,7 @@ def render_movie_cards(movie_list, genre_map, columns_count=4, show_details_butt
                         <div class="overview">{overview}</div>
                     </div>
                 </div>
-                """,
-                unsafe_allow_html=True
-            )
+            """), unsafe_allow_html=True)
 
             if show_details_button:
                 if st.button("View details", key=f"details_{movie['id']}"):
@@ -474,7 +466,6 @@ def render_movie_detail(movie_id, genre_map):
     rating = details.get("vote_average", "N/A")
     status = details.get("status", "N/A")
     poster_url = build_poster_url(details.get("poster_path"))
-    backdrop_url = build_backdrop_url(details.get("backdrop_path"))
 
     genres = details.get("genres", [])
     genre_names = [g["name"] for g in genres]
@@ -485,48 +476,71 @@ def render_movie_detail(movie_id, genre_map):
     videos = get_movie_videos(movie_id)
     trailer_key = get_youtube_trailer_key(videos)
 
-    st.markdown(f"""
-    <div class="detail-container">
-        <div class="detail-header">
-            <img class="detail-poster" src="{poster_url}" alt="{title}">
-            <div class="detail-info">
-                <div class="detail-title">{title}</div>
-                {f'<div class="detail-tagline">{tagline}</div>' if tagline else ''}
-                <div class="detail-meta">
-                    ⭐ {rating} | 📅 {release_date} | ⏱ {runtime if runtime else 'N/A'} min | {status}
-                </div>
-                <div class="badges">
-                    {"".join([f"<span class='badge'>{g}</span>" for g in genre_names])}
+    # Build trailer embed HTML if available
+    trailer_html = ""
+    if trailer_key:
+        trailer_html = dedent(f"""
+            <div style="margin-top: 20px;">
+                <div class="detail-section-title">Trailer</div>
+                <div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;max-width:100%;border-radius:12px;overflow:hidden;">
+                    <iframe style="position:absolute;top:0;left:0;width:100%;height:100%;"
+                        src="https://www.youtube.com/embed/{trailer_key}"
+                        title="YouTube video player"
+                        frameborder="0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                        allowfullscreen>
+                    </iframe>
                 </div>
             </div>
-        </div>
+        """)
 
-        <div class="detail-overview">{overview}</div>
-
-        {f'''
-        <div class="detail-section-title">Trailer</div>
-        ''' if trailer_key else ''}
-    </div>
-    """, unsafe_allow_html=True)
-
-    if trailer_key:
-        st.video(f"https://www.youtube.com/watch?v={trailer_key}")
-
-    st.markdown(f"""
-    <div class="detail-section-title">Top Cast</div>
-    """, unsafe_allow_html=True)
-
+    # Build cast HTML
+    cast_html = ""
     if cast:
-        cast_html = "".join(
+        cast_items = "".join(
             [f"<div class='cast-item'>{c.get('name', 'Unknown')} as {c.get('character', '')}</div>" for c in cast]
         )
-        st.markdown(f"""
-        <div class="cast-list">
+        cast_html = dedent(f"""
+            <div style="margin-top: 16px;">
+                <div class="detail-section-title">Top Cast</div>
+                <div class="cast-list">
+                    {cast_items}
+                </div>
+            </div>
+        """)
+
+    # Build full detail HTML
+    full_html = dedent(f"""
+        <div class="detail-container">
+            <div class="detail-header">
+                <img class="detail-poster" src="{poster_url}" alt="{title}">
+                <div class="detail-info">
+                    <div class="detail-title">{title}</div>
+                    {f'<div class="detail-tagline">{tagline}</div>' if tagline else ''}
+                    <div class="detail-meta">
+                        ⭐ {rating} | 📅 {release_date} | ⏱ {runtime if runtime else 'N/A'} min | {status}
+                    </div>
+                    <div class="badges">
+                        {"".join([f"<span class='badge'>{g}</span>" for g in genre_names])}
+                    </div>
+                </div>
+            </div>
+
+            <div style="margin-top: 16px;">
+                <div class="detail-section-title">Overview</div>
+                <div class="detail-overview">{overview}</div>
+            </div>
+
+            {trailer_html}
             {cast_html}
+
+            <div class="back-button">
+                <!-- back button will be added as a separate Streamlit widget below -->
+            </div>
         </div>
-        """, unsafe_allow_html=True)
-    else:
-        st.caption("Cast information not available.")
+    """)
+
+    st.markdown(full_html, unsafe_allow_html=True)
 
     if st.button("← Back to results", key="back_to_results"):
         st.session_state.pop("selected_movie_id", None)
@@ -537,22 +551,24 @@ def render_movie_detail(movie_id, genre_map):
 # MAIN UI
 # =========================
 
-st.markdown("""
+st.markdown(dedent("""
 <div class="hero-section">
     <div class="hero-title">🎬 IMDb Style Movie Recommender</div>
     <div class="hero-subtitle">
         Discover your next favorite film with smarter search, exact matching, and a cinematic interface.
     </div>
 </div>
-""", unsafe_allow_html=True)
+"""), unsafe_allow_html=True)
 
 genre_map = get_genre_map()
 
 # If a movie is selected, show detail view
 if "selected_movie_id" in st.session_state:
     render_movie_detail(st.session_state["selected_movie_id"], genre_map)
-    st.markdown('<div class="section-title">More like this</div>', unsafe_allow_html=True)
-    # Optionally show recommendations for this movie below detail
+    st.markdown(
+        '<div class="section-title">More like this</div>',
+        unsafe_allow_html=True
+    )
     recs = get_recommendations(st.session_state["selected_movie_id"], mode="recommendations")
     if recs:
         render_movie_cards(recs[:12], genre_map, columns_count=4, show_details_button=True)
@@ -617,7 +633,10 @@ if search_clicked:
             if auto_best_label in suggestions:
                 default_index = suggestions.index(auto_best_label)
 
-            st.markdown('<div class="section-title">Select the correct movie</div>', unsafe_allow_html=True)
+            st.markdown(
+                '<div class="section-title">Select the correct movie</div>',
+                unsafe_allow_html=True
+            )
             selected_label = st.selectbox(
                 "",
                 suggestions,
@@ -643,7 +662,10 @@ if search_clicked:
             else:
                 render_movie_cards(recommendations[:12], genre_map, columns_count=4, show_details_button=True)
 
-st.markdown('<div class="section-title">🔥 Trending This Week</div>', unsafe_allow_html=True)
+st.markdown(
+    '<div class="section-title">🔥 Trending This Week</div>',
+    unsafe_allow_html=True
+)
 with st.spinner("Loading trending movies..."):
     trending_movies = get_trending_movies()
 
